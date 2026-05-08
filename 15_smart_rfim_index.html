@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart RFIM · ML Customer Segmentation for Modern Commerce</title>
+<meta name="description" content="A behind-the-scenes case study of Smart RFIM — the ML-driven customer segmentation product I built from 0 to 1 at SHOPLINE, used by 15,000 merchants and powering a $48M revenue spike in week 1." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --bg-card: #12151c;
+    --bg-elev: #181c25;
+    --border: #232733;
+    --text: #e8eaed;
+    --text-muted: #8b92a3;
+    --text-dim: #5c6373;
+    --accent: #7c5cff;
+    --accent-soft: rgba(124, 92, 255, 0.12);
+    --accent-2: #00d4a4;
+    --warn: #ff9550;
+    --danger: #ff5c7a;
+    --success: #38d399;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Nav */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(11, 13, 18, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px; max-width: 1180px; margin: 0 auto;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
+  .logo-icon {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 13px;
+  }
+  .nav-links { display: flex; gap: 28px; font-size: 14px; }
+  .nav-links a { color: var(--text-muted); text-decoration: none; transition: color 0.15s; }
+  .nav-links a:hover { color: var(--text); }
+  @media (max-width: 720px) { .nav-links { display: none; } }
+
+  /* Hero */
+  .hero { padding: 100px 0 80px; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 600px;
+    background: radial-gradient(circle, var(--accent-soft) 0%, transparent 60%);
+    z-index: -1;
+  }
+  .eyebrow {
+    display: inline-block; padding: 6px 12px;
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 100px; font-size: 12px; font-weight: 600;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  h1 {
+    font-size: clamp(34px, 6vw, 56px);
+    line-height: 1.1; font-weight: 800; letter-spacing: -0.02em;
+    margin-bottom: 24px; max-width: 900px;
+  }
+  h1 .grad {
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero-sub {
+    font-size: clamp(17px, 2vw, 21px); color: var(--text-muted);
+    max-width: 720px; margin-bottom: 40px;
+  }
+  .hero-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; margin-top: 50px; }
+  @media (max-width: 720px) { .hero-stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat-num {
+    font-size: clamp(28px, 4vw, 38px); font-weight: 800; letter-spacing: -0.02em;
+    margin-bottom: 6px; font-feature-settings: 'tnum';
+  }
+  .stat-label { font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+
+  /* Section */
+  section { padding: 80px 0; border-top: 1px solid var(--border); }
+  .section-eyebrow { font-size: 13px; color: var(--accent); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 12px; }
+  h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 16px; max-width: 760px; }
+  h3 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+  .lead { font-size: 18px; color: var(--text-muted); max-width: 720px; margin-bottom: 50px; }
+
+  /* Update note (the "we changed the model" callout) */
+  .update-callout {
+    background: linear-gradient(135deg, rgba(124, 92, 255, 0.08), rgba(0, 212, 164, 0.04));
+    border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 12px; padding: 22px 26px; margin: 32px 0;
+    display: flex; gap: 18px; align-items: start;
+  }
+  .update-callout .tag {
+    flex-shrink: 0; padding: 4px 10px; background: var(--accent); color: white;
+    border-radius: 100px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; margin-top: 2px;
+  }
+  .update-callout p { font-size: 14px; color: var(--text-muted); }
+  .update-callout p strong { color: var(--text); font-weight: 600; }
+
+  /* Problem section */
+  .problem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  @media (max-width: 720px) { .problem-grid { grid-template-columns: 1fr; } }
+  .problem-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 28px;
+  }
+  .problem-card .icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--accent-soft); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; margin-bottom: 18px;
+  }
+  .problem-card p { color: var(--text-muted); font-size: 15px; }
+
+  /* Demo / Playground */
+  .demo {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px;
+    padding: 36px; margin-top: 32px;
+  }
+  .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  @media (max-width: 880px) { .demo-grid { grid-template-columns: 1fr; } }
+  .cycle-context {
+    background: var(--bg-elev); border-radius: 10px; padding: 14px 18px;
+    font-size: 13px; color: var(--text-muted); margin-bottom: 24px;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .cycle-context strong { color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+  .input-group { margin-bottom: 22px; }
+  .input-group label {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 14px; font-weight: 500; margin-bottom: 8px;
+  }
+  .input-group label .val { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+  .input-group input[type="range"] {
+    width: 100%; -webkit-appearance: none; appearance: none;
+    height: 6px; border-radius: 3px; background: var(--bg-elev); outline: none;
+  }
+  .input-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 3px solid var(--bg);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .input-group input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 3px solid var(--bg);
+  }
+  .scale-row {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--text-dim); margin-top: 4px;
+  }
+  .axis-pills { display: flex; gap: 8px; margin-top: 22px; flex-wrap: wrap; }
+  .axis-pill {
+    padding: 6px 12px; border-radius: 100px; font-size: 12px;
+    background: var(--bg-elev); color: var(--text-muted); border: 1px solid var(--border);
+  }
+  .axis-pill.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .segment-result {
+    background: var(--bg-elev); border-radius: 14px; padding: 28px;
+    border: 1px solid var(--border); transition: all 0.3s;
+  }
+  .segment-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 100px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+    background: var(--accent-soft); color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .segment-name {
+    font-size: 28px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 12px;
+  }
+  .segment-desc { color: var(--text-muted); font-size: 14px; margin-bottom: 18px; line-height: 1.6; }
+  .segment-action { font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 14px; }
+  .segment-action strong { color: var(--text); font-weight: 500; }
+
+  /* Heatmap */
+  .heatmap {
+    display: grid; grid-template-columns: 90px repeat(3, 1fr); gap: 8px;
+    margin-top: 32px; max-width: 900px;
+  }
+  .hm-corner { }
+  .hm-x-label, .hm-y-label {
+    font-size: 11px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.04em; padding: 8px 6px; text-align: center;
+    align-self: center; font-weight: 500;
+  }
+  .hm-y-label { text-align: right; padding-right: 12px; }
+  .hm-cell {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 16px; min-height: 92px; transition: all 0.2s;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .hm-cell:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .hm-cell.empty { background: transparent; border: 1px dashed var(--border); }
+  .hm-cell .nm { font-size: 13px; font-weight: 600; line-height: 1.3; margin-bottom: 4px; }
+  .hm-cell .desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+  .hm-cell .dot { width: 6px; height: 6px; border-radius: 50%; margin-bottom: 8px; }
+  .hm-cell.core .dot { background: var(--success); }
+  .hm-cell.itop .dot { background: var(--warn); }
+  .hm-cell.active .dot { background: var(--accent); }
+  .hm-cell.ready .dot { background: #ffd166; }
+  .hm-cell.sleeping .dot { background: #c084fc; }
+  .hm-cell.new .dot { background: #5e9ef7; }
+  .hm-cell.potential .dot { background: #87b8c8; }
+  .hm-cell.lost .dot { background: var(--danger); }
+  .hm-cell.engaged .dot { background: #c5a3ff; }
+  @media (max-width: 720px) {
+    .heatmap { grid-template-columns: 1fr; gap: 14px; }
+    .hm-corner, .hm-x-label, .hm-y-label { display: none; }
+  }
+
+  /* Architecture */
+  .arch { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  @media (max-width: 880px) { .arch { grid-template-columns: 1fr; } }
+  .arch-list { display: flex; flex-direction: column; gap: 18px; }
+  .arch-item { display: flex; gap: 16px; }
+  .arch-item .num {
+    flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; font-family: 'JetBrains Mono', monospace;
+  }
+  .arch-item h4 { font-size: 16px; margin-bottom: 4px; }
+  .arch-item p { color: var(--text-muted); font-size: 14px; }
+  .code-block {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    overflow-x: auto; line-height: 1.7;
+  }
+  .code-block .kw { color: #c084fc; }
+  .code-block .fn { color: var(--accent-2); }
+  .code-block .str { color: #fbbf83; }
+  .code-block .com { color: var(--text-dim); font-style: italic; }
+  .code-block .nm { color: #5e9ef7; }
+
+  /* Activation suite */
+  .activation-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  @media (max-width: 720px) { .activation-grid { grid-template-columns: 1fr 1fr; } }
+  .act-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px; text-align: center;
+  }
+  .act-card .ico {
+    font-size: 24px; margin-bottom: 12px;
+  }
+  .act-card h4 { font-size: 14px; margin-bottom: 6px; }
+  .act-card p { font-size: 12px; color: var(--text-muted); }
+
+  /* Case study */
+  .case {
+    background: linear-gradient(135deg, rgba(124, 92, 255, 0.06), rgba(0, 212, 164, 0.04));
+    border: 1px solid var(--border); border-radius: 18px; padding: 48px;
+  }
+  .case-meta { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+  .case-meta .pill { background: var(--bg-elev); padding: 4px 10px; border-radius: 100px; font-size: 12px; }
+  .case h3 { font-size: 24px; margin-bottom: 16px; }
+  .case-quote { font-size: 18px; font-style: italic; color: var(--text); border-left: 3px solid var(--accent); padding-left: 18px; margin: 22px 0; max-width: 640px; line-height: 1.6; }
+  .case-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--border); }
+  @media (max-width: 720px) { .case-results { grid-template-columns: 1fr; gap: 18px; } }
+  .case-num {
+    font-size: 36px; font-weight: 800; color: var(--accent);
+    font-feature-settings: 'tnum'; letter-spacing: -0.02em;
+  }
+  .case-num-label { font-size: 13px; color: var(--text-muted); }
+
+  /* Dashboard */
+  .dash {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px;
+    padding: 32px;
+  }
+  .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+  .dash-title { font-size: 14px; color: var(--text-muted); }
+  .dash-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  @media (max-width: 720px) { .dash-cards { grid-template-columns: 1fr 1fr; } }
+  .dash-card {
+    background: var(--bg-elev); border-radius: 10px; padding: 18px;
+  }
+  .dash-card .lab { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .dash-card .v { font-size: 22px; font-weight: 700; font-feature-settings: 'tnum'; }
+  .dash-card .delta { font-size: 12px; color: var(--success); margin-top: 4px; }
+  .dash-card.featured { background: var(--accent-soft); border: 1px solid var(--accent); }
+  .dash-card.featured .lab { color: var(--accent); }
+  .dash-chart-wrap {
+    background: var(--bg-elev); border-radius: 10px; padding: 24px; height: 320px; position: relative;
+  }
+
+  /* PM role */
+  .pm-role { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; align-items: center; }
+  @media (max-width: 880px) { .pm-role { grid-template-columns: 1fr; } }
+  .pm-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px;
+    padding: 36px;
+  }
+  .pm-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 28px; }
+  .pm-item { padding: 16px; background: var(--bg-elev); border-radius: 10px; }
+  .pm-item .lab { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .pm-item .v { font-size: 14px; font-weight: 500; }
+  .pm-list { list-style: none; padding: 0; }
+  .pm-list li { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-muted); display: flex; gap: 10px; }
+  .pm-list li::before { content: "→"; color: var(--accent); flex-shrink: 0; }
+  .pm-list li:last-child { border-bottom: none; }
+
+  /* Footer */
+  footer { padding: 50px 0 40px; border-top: 1px solid var(--border); text-align: center; color: var(--text-dim); font-size: 13px; }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav>
+  <div class="nav-inner">
+    <div class="logo">
+      <div class="logo-icon">R</div>
+      <span>Smart RFIM</span>
+    </div>
+    <div class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#playground">Playground</a>
+      <a href="#segments">Segments</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#case">Case Study</a>
+      <a href="#about">About</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="container">
+    <div class="eyebrow">Product Case Study · 2022–2023</div>
+    <h1>Customer segmentation, <span class="grad">automated for 15,000 merchants</span>, in the era of social commerce.</h1>
+    <p class="hero-sub">Smart RFIM is the 0→1 ML segmentation product I built and shipped at SHOPLINE — a heatmap model that grades every customer by repurchase cycle and lifetime value. Used by 15,000 enterprise merchants. Shipped a $48M revenue spike in week one of rollout.</p>
+
+    <div class="hero-stats">
+      <div>
+        <div class="stat-num" id="stat-merchants">15,000</div>
+        <div class="stat-label">Merchants on the segmentation engine</div>
+      </div>
+      <div>
+        <div class="stat-num" id="stat-revenue">$48M</div>
+        <div class="stat-label">Aggregate week-1 revenue spike</div>
+      </div>
+      <div>
+        <div class="stat-num" id="stat-segments">9</div>
+        <div class="stat-label">Auto-generated customer segments</div>
+      </div>
+      <div>
+        <div class="stat-num" id="stat-pricing">+25%</div>
+        <div class="stat-label">CRM pricing uplift on adopters</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROBLEM ============ -->
+<section id="problem">
+  <div class="container">
+    <div class="section-eyebrow">The Problem</div>
+    <h2>Most merchants ran customer segmentation in a spreadsheet — or not at all.</h2>
+    <p class="lead">Across 15,000 enterprise merchants on the SHOPLINE engagement platform, only the most sophisticated had data teams running RFM analyses. The other 90% had untapped revenue sitting in dormant cohorts and no scalable way to reach them.</p>
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="icon">⚙</div>
+        <h3>Manual workflows didn't scale</h3>
+        <p>Top-decile merchants segmented customers in Excel. The bottom 90% relied on broad blasts to all customers, watching unsubscribe rates climb and conversion fall.</p>
+      </div>
+      <div class="problem-card">
+        <div class="icon">⏱</div>
+        <h3>Industry RFM ignored social</h3>
+        <p>Classic Recency–Frequency–Monetary models treat every customer who hasn't purchased as silent. But social-commerce customers leave signals: livestream comments, post engagements, DMs. RFM left those unused.</p>
+      </div>
+      <div class="problem-card">
+        <div class="icon">📉</div>
+        <h3>Activation was disconnected from segmentation</h3>
+        <p>Even merchants who built segments couldn't act on them — the marketing tool, the rewards tool, and the export tool were three separate workflows. Segments became reports, not levers.</p>
+      </div>
+    </div>
+
+    <div class="update-callout">
+      <span class="tag">v2 model update</span>
+      <p><strong>The model evolved.</strong> The original 9-segment model included a "Loyal Customers" segment, but post-launch data showed it overlapped messily with "Top Shoppers" — merchants found segments hard to act on cleanly. With the v2 release, Loyal moved to a custom-filter workflow (Order count &gt; N AND Spend = High) and Top Shoppers split into <strong>Core Top Shopper</strong> (still actively buying) and <strong>Inactive Top Shopper</strong> (high lifetime value but starting to slow). The split surfaces the highest-ROI reactivation cohort the previous model was hiding.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PLAYGROUND ============ -->
+<section id="playground">
+  <div class="container">
+    <div class="section-eyebrow">Live Playground</div>
+    <h2>Drop in any customer. Watch the model classify them.</h2>
+    <p class="lead">This is a working slice of the segmentation logic. Adjust the sliders to simulate any customer's behaviour profile and see which of the 9 segments they fall into — along with the recommended action SHOPLINE merchants saw in their admin.</p>
+
+    <div class="demo">
+      <div class="cycle-context">
+        <span>This merchant's <strong>repurchase cycle = 30 days</strong> (median time between repeat purchases).</span>
+        <span><strong>Top-10% spend threshold = $1,500</strong> · <strong>Top-10% purchase count = 5</strong></span>
+      </div>
+
+      <div class="demo-grid">
+        <div>
+          <div class="input-group">
+            <label>
+              <span>Recency — days since last order</span>
+              <span class="val" id="r-val">14 days</span>
+            </label>
+            <input type="range" id="r-slider" min="0" max="120" value="14" step="1" />
+            <div class="scale-row"><span>Today</span><span>120 days ago</span></div>
+            <div class="axis-pills">
+              <span class="axis-pill" id="ap-recent">Recently purchased (≤24d)</span>
+              <span class="axis-pill" id="ap-ready">Ready-to-repurchase (24–36d)</span>
+              <span class="axis-pill" id="ap-lapsed">Lapsed (&gt;36d)</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label>
+              <span>Frequency — total purchases (lifetime)</span>
+              <span class="val" id="f-val">3 orders</span>
+            </label>
+            <input type="range" id="f-slider" min="0" max="20" value="3" step="1" />
+            <div class="scale-row"><span>0</span><span>20+</span></div>
+          </div>
+          <div class="input-group">
+            <label>
+              <span>Monetary — total lifetime spend</span>
+              <span class="val" id="m-val">$640</span>
+            </label>
+            <input type="range" id="m-slider" min="0" max="5000" value="640" step="20" />
+            <div class="scale-row"><span>$0</span><span>$5K+</span></div>
+          </div>
+          <div class="input-group">
+            <label>
+              <span>Interaction — social/site signals (last 90d)</span>
+              <span class="val" id="i-val">2 signals</span>
+            </label>
+            <input type="range" id="i-slider" min="0" max="30" value="2" step="1" />
+            <div class="scale-row"><span>0</span><span>30+ touches</span></div>
+          </div>
+        </div>
+
+        <div class="segment-result" id="result">
+          <div class="segment-badge" id="result-tier">Conversion Window</div>
+          <div class="segment-name" id="result-name">Ready-to-Repurchase Shopper</div>
+          <div class="segment-desc" id="result-desc">Repeat customer hitting the typical purchase cycle for this merchant. The single highest-ROI cohort to broadcast to.</div>
+          <div class="segment-action"><strong id="result-action-label">Recommended action:</strong> <span id="result-action">Personalised reorder reminder. Modest discount only if needed — they were going to buy anyway.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HEATMAP / 9 SEGMENTS ============ -->
+<section id="segments">
+  <div class="container">
+    <div class="section-eyebrow">The 9-Segment Heatmap</div>
+    <h2>Two axes: <span class="grad">repurchase cycle</span> × <span class="grad">lifetime value</span>.</h2>
+    <p class="lead">Every customer is plotted on a heatmap. The X-axis is where they sit in the merchant's repurchase cycle (Recently purchased / Ready-to-repurchase / Lapsed). The Y-axis is their lifetime purchase tier (Top Shopper / Repeated / One-time / Browser). The intersection produces 9 distinct, non-overlapping segments — each with its own activation playbook.</p>
+
+    <div class="heatmap" aria-label="9-segment heatmap">
+      <div class="hm-corner"></div>
+      <div class="hm-x-label">Recently purchased</div>
+      <div class="hm-x-label">Ready-to-repurchase</div>
+      <div class="hm-x-label">Lapsed</div>
+
+      <div class="hm-y-label">Top<br/>Shopper</div>
+      <div class="hm-cell core"><div class="dot"></div><div class="nm">Core Top Shopper</div><div class="desc">Highest LTV and still buying. The 1% you protect at all costs.</div></div>
+      <div class="hm-cell itop"><div class="dot"></div><div class="nm">Inactive Top Shopper</div><div class="desc">High lifetime value, starting to slow. The reactivation segment with the largest upside.</div></div>
+      <div class="hm-cell itop"><div class="dot"></div><div class="nm">Inactive Top Shopper</div><div class="desc">Lapsed but historically Top — flagged whether or not interaction is still happening.</div></div>
+
+      <div class="hm-y-label">Repeated<br/>Shopper</div>
+      <div class="hm-cell active"><div class="dot"></div><div class="nm">Active Shopper</div><div class="desc">Currently transacting at healthy frequency. Watch for graduation to Top.</div></div>
+      <div class="hm-cell ready"><div class="dot"></div><div class="nm">Ready-to-Repurchase</div><div class="desc">Hit the typical repurchase cycle. The highest-ROI broadcast cohort.</div></div>
+      <div class="hm-cell sleeping"><div class="dot"></div><div class="nm">Sleeping Shopper</div><div class="desc">Lapsed without recent interaction. The Bonny &amp; Read $500K cohort.</div></div>
+
+      <div class="hm-y-label">One-time<br/>Shopper</div>
+      <div class="hm-cell new"><div class="dot"></div><div class="nm">New Shopper</div><div class="desc">First-time buyer, still in cycle window. Onboarding determines what they become.</div></div>
+      <div class="hm-cell potential"><div class="dot"></div><div class="nm">Potential Shopper</div><div class="desc">One purchase, ready-to-repurchase or interacting. Convert before they go quiet.</div></div>
+      <div class="hm-cell lost"><div class="dot"></div><div class="nm">Lost Shopper</div><div class="desc">One purchase, lapsed without interaction. Test before investing.</div></div>
+
+      <div class="hm-y-label">Browser</div>
+      <div class="hm-cell engaged" style="grid-column: 2 / span 3;"><div class="dot"></div><div class="nm">Engaged Customer</div><div class="desc">Never purchased but interacting (browse, social, livestream comments) within 3× the repurchase cycle. The acquisition wedge.</div></div>
+    </div>
+
+    <p style="font-size: 13px; color: var(--text-dim); margin-top: 28px; max-width: 720px;">
+      <strong style="color: var(--text-muted);">Cycle thresholds:</strong> Recently purchased = ≤ 0.8× store cycle · Ready-to-repurchase = 0.8–1.2× cycle · Lapsed = &gt; 1.2× cycle · Continued Engagement = interaction within 3× cycle.
+    </p>
+    <p style="font-size: 13px; color: var(--text-dim); margin-top: 8px; max-width: 720px;">
+      <strong style="color: var(--text-muted);">Y-axis thresholds:</strong> Top Shopper = (purchases &gt; 3 OR top 10% purchase count) OR spend &gt; top 10% · Repeated = 1 &lt; purchases ≤ top tier · One-time = 1 purchase · Browser = 0 purchases with interaction.
+    </p>
+  </div>
+</section>
+
+<!-- ============ ARCHITECTURE ============ -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-eyebrow">How It Works</div>
+    <h2>Per-merchant cycle, not global thresholds.</h2>
+    <p class="lead">Every merchant gets their own repurchase cycle calculated from their repeat-shopper history. A "Lapsed" customer for a fast-fashion brand (cycle = 14 days) is a different concept from a "Lapsed" customer for furniture (cycle = 180 days). The model adapts.</p>
+
+    <div class="arch">
+      <div class="arch-list">
+        <div class="arch-item">
+          <div class="num">01</div>
+          <div>
+            <h4>Compute the merchant's repurchase cycle</h4>
+            <p>Median number of days between purchases across all repeat shoppers in the past 2 years. New merchants (&lt;6mo) inherit the category median to avoid cold-start.</p>
+          </div>
+        </div>
+        <div class="arch-item">
+          <div class="num">02</div>
+          <div>
+            <h4>Bucket each customer on the X-axis</h4>
+            <p>Recently purchased ≤ 0.8× cycle · Ready-to-repurchase 0.8–1.2× cycle · Lapsed &gt; 1.2× cycle. Cycle-relative, not absolute.</p>
+          </div>
+        </div>
+        <div class="arch-item">
+          <div class="num">03</div>
+          <div>
+            <h4>Bucket each customer on the Y-axis</h4>
+            <p>Top Shopper / Repeated / One-time / Browser — driven by purchase count thresholds AND lifetime spend top-10%. The OR-condition logic prevents segment overlap.</p>
+          </div>
+        </div>
+        <div class="arch-item">
+          <div class="num">04</div>
+          <div>
+            <h4>Apply interaction rule for ambiguous cases</h4>
+            <p>Lapsed customers with interaction within 3× cycle stay reachable (Ready-to-Repurchase / Potential). Lapsed without interaction become Sleeping / Lost.</p>
+          </div>
+        </div>
+        <div class="arch-item">
+          <div class="num">05</div>
+          <div>
+            <h4>Refresh daily</h4>
+            <p>Daily incremental refresh. Stability over raw accuracy — merchants need segments they can plan a quarter-long campaign around without whiplash.</p>
+          </div>
+        </div>
+      </div>
+
+<pre class="code-block"><span class="com">-- Smart RFIM segmentation, simplified
+-- v2 model: Loyal removed, Top split into Core/Inactive</span>
+<span class="kw">WITH</span> store_cycle <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> merchant_id,
+    <span class="fn">PERCENTILE_CONT</span>(0.5) <span class="kw">WITHIN GROUP</span> (
+      <span class="kw">ORDER BY</span> days_between_orders
+    ) <span class="kw">AS</span> cycle_days
+  <span class="kw">FROM</span> repeat_purchase_intervals
+  <span class="kw">GROUP BY</span> merchant_id
+),
+customer_metrics <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> o.merchant_id, o.customer_id,
+    <span class="fn">COUNT</span>(*) <span class="kw">AS</span> purchases,
+    <span class="fn">SUM</span>(o.gmv_usd) <span class="kw">AS</span> total_spend,
+    <span class="fn">CURRENT_DATE</span> - <span class="fn">MAX</span>(o.order_at)::<span class="nm">date</span> <span class="kw">AS</span> recency_days
+  <span class="kw">FROM</span> orders o
+  <span class="kw">WHERE</span> o.auth_status = <span class="str">'success'</span>
+  <span class="kw">GROUP BY</span> o.merchant_id, o.customer_id
+)
+<span class="kw">SELECT</span> cm.*, sc.cycle_days,
+  <span class="kw">CASE</span>
+    <span class="com">-- Top tier × cycle position</span>
+    <span class="kw">WHEN</span> top_shopper <span class="kw">AND</span> recency_days &lt;= 0.8*cycle_days
+      <span class="kw">THEN</span> <span class="str">'Core Top Shopper'</span>
+    <span class="kw">WHEN</span> top_shopper <span class="kw">AND</span> recency_days &gt; 0.8*cycle_days
+      <span class="kw">THEN</span> <span class="str">'Inactive Top Shopper'</span>
+    <span class="com">-- Repeated tier × cycle position</span>
+    <span class="kw">WHEN</span> repeated <span class="kw">AND</span> recency_days &lt;= 0.8*cycle_days
+      <span class="kw">THEN</span> <span class="str">'Active Shopper'</span>
+    <span class="kw">WHEN</span> repeated <span class="kw">AND</span> recency_days &lt;= 1.2*cycle_days
+      <span class="kw">THEN</span> <span class="str">'Ready-to-Repurchase'</span>
+    <span class="kw">WHEN</span> repeated <span class="kw">AND</span> has_interaction
+      <span class="kw">THEN</span> <span class="str">'Ready-to-Repurchase'</span>
+    <span class="kw">WHEN</span> repeated
+      <span class="kw">THEN</span> <span class="str">'Sleeping Shopper'</span>
+    <span class="com">-- One-time tier × cycle position</span>
+    <span class="kw">WHEN</span> one_time <span class="kw">AND</span> recency_days &lt;= 0.8*cycle_days
+      <span class="kw">THEN</span> <span class="str">'New Shopper'</span>
+    <span class="kw">WHEN</span> one_time <span class="kw">AND</span> (recency_days &lt;= 1.2*cycle_days
+      <span class="kw">OR</span> has_interaction) <span class="kw">THEN</span> <span class="str">'Potential Shopper'</span>
+    <span class="kw">WHEN</span> one_time <span class="kw">THEN</span> <span class="str">'Lost Shopper'</span>
+    <span class="com">-- Browsers</span>
+    <span class="kw">WHEN</span> has_interaction <span class="kw">THEN</span> <span class="str">'Engaged Customer'</span>
+  <span class="kw">END</span> <span class="kw">AS</span> rfim_segment
+<span class="kw">FROM</span> customer_metrics cm
+<span class="kw">JOIN</span> store_cycle sc <span class="kw">USING</span> (merchant_id);</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ACTIVATION ============ -->
+<section>
+  <div class="container">
+    <div class="section-eyebrow">Closed-Loop Activation</div>
+    <h2>Segments are useless without one-click activation.</h2>
+    <p class="lead">The product principle from day one: segmentation and activation must live in the same surface. A merchant should never have to copy a list out of a CRM and paste it into a marketing tool.</p>
+    <div class="activation-grid">
+      <div class="act-card"><div class="ico">📨</div><h4>Broadcast</h4><p>EDM · SMS · LINE · FB Messenger from one segment view</p></div>
+      <div class="act-card"><div class="ico">🎁</div><h4>Reward</h4><p>Points · store credit · personalised coupons</p></div>
+      <div class="act-card"><div class="ico">📤</div><h4>Export</h4><p>One click to ad platforms or backup</p></div>
+      <div class="act-card"><div class="ico">📊</div><h4>Retarget</h4><p>Pipe segments into Shoplytics for performance tracking</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CASE STUDY ============ -->
+<section id="case">
+  <div class="container">
+    <div class="section-eyebrow">Customer Story</div>
+    <h2>One merchant. One week. Half a million in incremental revenue.</h2>
+
+    <div class="case" style="margin-top: 32px;">
+      <div class="case-meta">
+        <span class="pill">Bonny &amp; Read</span>
+        <span>Taiwan-based fashion accessories brand</span>
+      </div>
+      <h3>The Sleeping Shopper reactivation play</h3>
+      <p style="color: var(--text-muted); max-width: 720px;">
+        Bonny &amp; Read had a long tail of customers who'd bought once and gone quiet. Before Smart RFIM, reactivating them meant a marketing manager pulling lists by hand, segmenting in Excel, and crafting bespoke offers — work the team didn't have headcount for.
+      </p>
+      <p style="color: var(--text-muted); max-width: 720px; margin-top: 12px;">
+        With Smart RFIM, they segmented the Sleeping Shopper cohort by depth of dormancy and lifetime value, then issued differentiated store-credit offers — heavier credit to the highest-value, deepest-sleeping customers. Single workflow, no spreadsheets.
+      </p>
+      <div class="case-quote">"Don't have to pull customer reports or send store credit by hand any more. Saved a lot of headcount cost. Results are excellent."</div>
+      <div class="case-results">
+        <div>
+          <div class="case-num" id="case-orders">600+</div>
+          <div class="case-num-label">Reactivated orders in one week</div>
+        </div>
+        <div>
+          <div class="case-num" id="case-revenue">NT$500K+</div>
+          <div class="case-num-label">Incremental revenue, week 1</div>
+        </div>
+        <div>
+          <div class="case-num" id="case-cohort">Sleeping</div>
+          <div class="case-num-label">The reactivation segment</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DASHBOARD ============ -->
+<section>
+  <div class="container">
+    <div class="section-eyebrow">Merchant Dashboard</div>
+    <h2>What merchants saw in their admin.</h2>
+    <p class="lead">A simulated snapshot of a single merchant's segment distribution and reactivation campaign performance — the same view 15,000 merchants used to plan campaigns. The v2 model update spotlit <strong style="color: var(--text);">Inactive Top Shopper</strong> as the highest-priority surface in the dashboard.</p>
+
+    <div class="dash">
+      <div class="dash-header">
+        <div>
+          <div style="font-weight: 600; font-size: 18px; margin-bottom: 4px;">Bonny &amp; Read · monthly snapshot</div>
+          <div class="dash-title">Customer base · 28,471 active · Repurchase cycle: 30 days</div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-dim);">Last refresh: 04:00 UTC</div>
+      </div>
+      <div class="dash-cards">
+        <div class="dash-card"><div class="lab">Core Top Shopper</div><div class="v">847</div><div class="delta">+4.2%</div></div>
+        <div class="dash-card featured"><div class="lab">Inactive Top Shopper</div><div class="v">1,420</div><div class="delta" style="color: var(--warn);">+18.6% MoM ↑</div></div>
+        <div class="dash-card"><div class="lab">Sleeping Shopper</div><div class="v">7,924</div><div class="delta" style="color: var(--warn);">−12.4% MoM</div></div>
+        <div class="dash-card"><div class="lab">Lost Shopper</div><div class="v">2,058</div><div class="delta" style="color: var(--text-muted);">flat</div></div>
+      </div>
+      <div class="dash-chart-wrap">
+        <canvas id="seg-chart"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ABOUT ============ -->
+<section id="about">
+  <div class="container">
+    <div class="section-eyebrow">My Role</div>
+    <h2>Built end-to-end as PM, Customer Growth &amp; Engagement.</h2>
+
+    <div class="pm-role" style="margin-top: 32px;">
+      <div class="pm-card">
+        <h3>Wei Ling (Jenny) Hsiao</h3>
+        <p style="color: var(--text-muted); margin-top: 8px;">Cambridge MBA · Targeting fintech / AI PM in London</p>
+        <div class="pm-meta">
+          <div class="pm-item"><div class="lab">Role</div><div class="v">Product Manager · 0→1</div></div>
+          <div class="pm-item"><div class="lab">Tenure</div><div class="v">Aug 2021 – Aug 2023</div></div>
+          <div class="pm-item"><div class="lab">PRD authored</div><div class="v">v0.0 · Jan 3, 2022</div></div>
+          <div class="pm-item"><div class="lab">Cross-functional</div><div class="v">3 ML eng · 2 data · 1 design</div></div>
+        </div>
+        <p style="font-size: 14px; color: var(--text-muted); margin-top: 24px; line-height: 1.7;">
+          Smart RFIM was my second product as PM. I owned the model design, the PRD, the cross-functional team, and the GTM. The deeper lesson it taught me: in ML products, segment <em>stability</em> matters more than raw accuracy — merchants need segments they can plan a quarter-long campaign around. The v2 model update (Loyal deprecated, Top split into Core/Inactive) was driven by the same principle: shrink overlapping segments, surface the cohorts merchants can actually act on.
+        </p>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom: 18px;">What I owned end-to-end</h3>
+        <ul class="pm-list">
+          <li>Authored v0.0 PRD; iterated through v3 with Anna Wu</li>
+          <li>RFM → RFIM model design with Interaction as the social-commerce primitive</li>
+          <li>Per-merchant repurchase-cycle logic (mature vs new merchant fork)</li>
+          <li>Cycle-based heatmap classification with 9 non-overlapping segments</li>
+          <li>Auto + manual segmentation builder with 40+ filter conditions</li>
+          <li>Closed-loop activation: broadcast / reward / export / retarget</li>
+          <li>Customer interview cadence to validate segment definitions</li>
+          <li>Bonny &amp; Read pilot &amp; case-study packaging</li>
+          <li>v2 model evolution: deprecated Loyal, split Top into Core/Inactive</li>
+          <li>Cross-functional alignment with engagement, payments, and CDP teams</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="container">
+    <p>Built as a portfolio piece — not affiliated with SHOPLINE Inc. or its products.</p>
+    <p style="margin-top: 8px;">All data shown is illustrative or anonymised. Source documentation derived from internal product specs and public Shoplytics Help Center articles.</p>
+    <p style="margin-top: 14px;"><a href="mailto:wlh32@jbs.cam.ac.uk">wlh32@jbs.cam.ac.uk</a> · <a href="mailto:jennyhsiao0110@gmail.com">jennyhsiao0110@gmail.com</a></p>
+  </div>
+</footer>
+
+<script>
+  // ============ Playground logic ============
+  const rEl = document.getElementById('r-slider');
+  const fEl = document.getElementById('f-slider');
+  const iEl = document.getElementById('i-slider');
+  const mEl = document.getElementById('m-slider');
+  const rVal = document.getElementById('r-val');
+  const fVal = document.getElementById('f-val');
+  const iVal = document.getElementById('i-val');
+  const mVal = document.getElementById('m-val');
+  const rName = document.getElementById('result-name');
+  const rDesc = document.getElementById('result-desc');
+  const rTier = document.getElementById('result-tier');
+  const rAct = document.getElementById('result-action');
+  const apRecent = document.getElementById('ap-recent');
+  const apReady = document.getElementById('ap-ready');
+  const apLapsed = document.getElementById('ap-lapsed');
+
+  // Merchant context (what the merchant's distribution looks like)
+  const STORE_CYCLE = 30;          // days
+  const TOP_PURCHASES = 5;         // > 5 purchases OR top 10% by count
+  const TOP_SPEND = 1500;          // > $1,500 lifetime spend = top 10%
+  const INTERACTION_REACH = STORE_CYCLE * 3; // 90 days
+
+  // X-axis thresholds (relative to store cycle)
+  function recencyBucket(days) {
+    if (days <= STORE_CYCLE * 0.8) return 'recent';
+    if (days <= STORE_CYCLE * 1.2) return 'ready';
+    return 'lapsed';
+  }
+  // Y-axis thresholds
+  function purchaseTier(purchases, spend) {
+    if (purchases === 0) return 'browser';
+    // Top Shopper: purchases > top tier OR spend > top tier
+    if (purchases > TOP_PURCHASES || spend > TOP_SPEND) return 'top';
+    if (purchases > 1) return 'repeated';
+    return 'one_time';
+  }
+
+  const segmentMap = {
+    'Core Top Shopper':       { tier: 'High Value · Active', desc: 'Highest lifetime value AND still buying. The 1% you protect at all costs.', action: 'VIP-tier exclusivity. Early access to new drops. Avoid discount cannibalisation — they\'ll buy at full price.' },
+    'Inactive Top Shopper':   { tier: 'High Value · At Risk', desc: 'Highest lifetime value but starting to slow. The single highest-ROI reactivation cohort — the v2 model update specifically surfaced this segment.', action: 'White-glove outreach. Personal "we miss you" message + curated picks. Reactivate before they migrate to a competitor.' },
+    'Active Shopper':         { tier: 'Steady',           desc: 'Currently transacting at healthy frequency. Watch for graduation to Top Shopper.', action: 'Lifecycle automation. Bundle suggestions to lift AOV.' },
+    'Ready-to-Repurchase Shopper': { tier: 'Conversion Window', desc: 'Repeat customer hitting the typical purchase cycle for this merchant. The single highest-ROI cohort to broadcast to.', action: 'Personalised reorder reminder. Modest discount only if needed — they were going to buy anyway.' },
+    'Sleeping Shopper':       { tier: 'Reactivation',     desc: 'Repeat customer who has lapsed without recent interaction. The cohort that drove Bonny & Read\'s NT$500K week.', action: 'Tiered store credit by dormancy depth. "We miss you" + curated picks.' },
+    'New Shopper':            { tier: 'Onboarding',       desc: 'First-time buyer, still within the cycle window. Whether they become Active or Lost depends on the next 30 days.', action: 'Welcome series. Education content. Second-purchase incentive timed to category cycle.' },
+    'Potential Shopper':      { tier: 'Conversion',       desc: 'One purchase, ready-to-repurchase or interacting. Convert before they go quiet.', action: 'Second-purchase incentive. Highlight social proof + complementary product recommendations.' },
+    'Lost Shopper':           { tier: 'Reactivation',     desc: 'One purchase, lapsed without recent interaction. Test before investing.', action: 'Low-cost test send. If no response, suppress to protect deliverability.' },
+    'Engaged Customer':       { tier: 'Acquisition',      desc: 'Never purchased but interacting via browse, social, or livestream comments within 3× the repurchase cycle. The first-purchase opportunity.', action: 'First-purchase incentive (free shipping, $X off). Highlight social proof from existing customers.' },
+    'Other':                  { tier: 'Inactive',         desc: 'No purchases and no interaction within 3× cycle. Below the threshold for active marketing.', action: 'Suppress. Clean from active marketing list to protect deliverability and signal quality.' },
+  };
+
+  function classify(recency, freq, mon, inter) {
+    const x = recencyBucket(recency);
+    const y = purchaseTier(freq, mon);
+    const hasInteraction = inter > 0;
+    const interactionInWindow = inter > 0 && recency <= INTERACTION_REACH;
+
+    // Top Shopper tier
+    if (y === 'top') {
+      if (x === 'recent') return 'Core Top Shopper';
+      // Per v2 model: any non-recent Top = Inactive Top (Ready or Lapsed)
+      return 'Inactive Top Shopper';
+    }
+    // Repeated tier
+    if (y === 'repeated') {
+      if (x === 'recent') return 'Active Shopper';
+      if (x === 'ready') return 'Ready-to-Repurchase Shopper';
+      // Lapsed
+      if (interactionInWindow) return 'Ready-to-Repurchase Shopper';
+      return 'Sleeping Shopper';
+    }
+    // One-time tier
+    if (y === 'one_time') {
+      if (x === 'recent') return 'New Shopper';
+      if (x === 'ready') return 'Potential Shopper';
+      // Lapsed
+      if (interactionInWindow) return 'Potential Shopper';
+      return 'Lost Shopper';
+    }
+    // Browser tier (no purchases)
+    if (y === 'browser' && interactionInWindow) return 'Engaged Customer';
+    return 'Other';
+  }
+
+  function update() {
+    const r = +rEl.value;
+    const f = +fEl.value;
+    const i = +iEl.value;
+    const m = +mEl.value;
+    rVal.textContent = r === 0 ? 'today' : r + ' day' + (r > 1 ? 's' : '');
+    fVal.textContent = f + ' order' + (f !== 1 ? 's' : '');
+    iVal.textContent = i + ' signal' + (i !== 1 ? 's' : '');
+    mVal.textContent = '$' + m.toLocaleString();
+
+    // Update axis pills
+    const x = recencyBucket(r);
+    apRecent.classList.toggle('active', x === 'recent');
+    apReady.classList.toggle('active', x === 'ready');
+    apLapsed.classList.toggle('active', x === 'lapsed');
+
+    const seg = classify(r, f, m, i);
+    const info = segmentMap[seg] || segmentMap['Other'];
+    rName.textContent = seg;
+    rDesc.textContent = info.desc;
+    rTier.textContent = info.tier;
+    rAct.textContent = info.action;
+  }
+  [rEl, fEl, iEl, mEl].forEach(el => el.addEventListener('input', update));
+  update();
+
+  // ============ Chart ============
+  const ctx = document.getElementById('seg-chart');
+  if (ctx) {
+    const data = {
+      labels: [
+        'Core Top',
+        'Inactive Top',
+        'Active',
+        'Ready-to-Repurch.',
+        'Sleeping',
+        'New',
+        'Potential',
+        'Lost',
+        'Engaged'
+      ],
+      datasets: [{
+        label: 'Customers',
+        data: [847, 1420, 5894, 1502, 7924, 2317, 5400, 2058, 1109],
+        backgroundColor: [
+          '#38d399', // core top
+          '#ff9550', // inactive top - highlighted
+          '#7c5cff', // active
+          '#ffd166', // ready
+          '#c084fc', // sleeping
+          '#5e9ef7', // new
+          '#87b8c8', // potential
+          '#ff5c7a', // lost
+          '#c5a3ff', // engaged
+        ],
+        borderWidth: 0,
+        borderRadius: 6,
+      }]
+    };
+    new Chart(ctx, {
+      type: 'bar',
+      data,
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => c.parsed.y.toLocaleString() + ' customers' } }
+        },
+        scales: {
+          x: { ticks: { color: '#8b92a3', font: { family: 'Inter', size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: '#8b92a3', font: { family: 'Inter', size: 11 } }, grid: { color: '#232733' } }
+        }
+      }
+    });
+  }
+</script>
+</body>
+</html>
